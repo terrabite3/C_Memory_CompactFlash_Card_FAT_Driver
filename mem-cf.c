@@ -30,7 +30,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 
-#include "main.h"					//Global data type definitions (see https://github.com/ibexuk/C_Generic_Header_File )
+// #include "main.h"					//Global data type definitions (see https://github.com/ibexuk/C_Generic_Header_File )
 #define CF_C
 #include "mem-cf.h"
 
@@ -382,7 +382,7 @@ void ffs_process (void)
 		goto init_new_ffs_card_fail;
 
 	//Get 'Sectors Per Cluster' [# + 0x000d]
-	//(Restricted to powers of 2 (1, 2, 4, 8, 16, 32…))
+	//(Restricted to powers of 2 (1, 2, 4, 8, 16, 32ï¿½))
 	sectors_per_cluster = *buffer_pointer++;
 	
 	b_temp = 0;											//Check its power of 2 (other functions rely on this check)

@@ -190,7 +190,7 @@ typedef struct _FFS_FILE
 #define	FFS_EOF				-1
 
 
-#endif
+#endif // FFS_C_INIT
 
 
 

@@ -126,7 +126,7 @@ typedef enum _FFS_PROCESS_STATE
 } FFS_PROCESS_STATE;
 
 
-#endif
+#endif // CF_C_INIT
 
 
 
