@@ -70,9 +70,6 @@ void ffs_process (void)
 		//-------------------------------
 		//----- NO CARD IS INSERTED -----
 		//-------------------------------
-		FFS_CE = 1;
-		FFS_WE = 1;
-		FFS_OE = 1;
 		
 		ffs_card_ok = 0;					//Flag that card not OK
 
@@ -86,8 +83,11 @@ void ffs_process (void)
 
 		//A card has been inserted
 		//Pause for 500mS seconds
-		ffs_10ms_timer = 50;
-		sm_ffs_process = FFS_PROCESS_WAIT_FOR_CARD_FULLY_INSERTED;
+		// ffs_10ms_timer = 50; // Don't bother with the wait
+		// sm_ffs_process = FFS_PROCESS_WAIT_FOR_CARD_FULLY_INSERTED;
+
+		// We can't do any reset stuff, so skip straight to reading it -- next time
+		sm_ffs_process = FFS_PROCESS_WAIT_FOR_CARD_RESET;
 
 		return;
 
@@ -111,9 +111,9 @@ void ffs_process (void)
 		
 		//Card has been inserted for 500ms - reset the card
 		ffs_card_reset_pin(1);
-		FFS_REG = 1;						//Set reg pin high
+		// FFS_REG = 1;						//Set reg pin high
 
-		ffs_10ms_timer = 2;				//(Actually need about 4mS, but set to 2 to ensure that at least 10mS passes from this timer)
+		// ffs_10ms_timer = 2;				//(Actually need about 4mS, but set to 2 to ensure that at least 10mS passes from this timer)
 		sm_ffs_process = FFS_PROCESS_COMPLETE_RESET;
 
 		return;
@@ -132,7 +132,7 @@ void ffs_process (void)
 		ffs_card_reset_pin(0);
 
 		//Pause 500mS for card to be ready
-		ffs_10ms_timer = 50;
+		// ffs_10ms_timer = 50;
 		sm_ffs_process = FFS_PROCESS_WAIT_FOR_CARD_RESET;
 		return;
 
@@ -194,22 +194,12 @@ void ffs_process (void)
 	//---------------------------------------------------
 	//----- READ CARD SETUP (CF Identify Drive Cmd) -----
 	//---------------------------------------------------
-	FFS_CE = 0;								//Select the card
 
 	//Write the 'Select Card/Head' register [LBA27:24 - bits3:0]
-	ffs_set_address(0x06);
-	if (ffs_write_byte(0x00) == 0)
-		goto init_new_ffs_card_fail;
+	CF_LBA3 = 0;
 
-	//Select the command register
-	ffs_set_address(0x07);
-	
 	//Send 'Identify Drive' instruction
-	if (ffs_write_byte(0xec) == 0)
-		goto init_new_ffs_card_fail;	
-
-	//Read from the data register
-	ffs_set_address(0x00);
+	CF_COMMAND = 0xec;
 
 	//CHECK GENERAL CONFIGURATION WORD (0X848A = CF CARD)
 	w_temp = ffs_read_word();
@@ -264,25 +254,16 @@ void ffs_process (void)
 	//----- READ THE MASTER BOOT RECORD -----
 	//---------------------------------------
 	// read sector 1 (LBA 0x00)
-	ffs_set_address(0x06);					//Write the 'Select Card/Head' register [LBA27:24 - bits3:0]
-	ffs_write_byte(0xe0);					//(Use Logic Block Addressing - not Cylinder,Head,Sector)
+	CF_LBA3 = 0xe0;
+	CF_LBA2 = 0x00;
+	CF_LBA1 = 0x00;
+	CF_LBA0 = 0x00;
 
-	ffs_set_address(0x05);					//Write the 'Cylinder High' register [LBA23:16]
-	ffs_write_byte(0x00);
+	// Write the 'Sector Count' register (no of sectors to be transfered to complete the operation)
+	CF_COUNT = 0x01;
 
-	ffs_set_address(0x04);					//Write the 'Cylinder Low' register [LBA15:8]
-	ffs_write_byte(0x00);
-
-	ffs_set_address(0x03);					//Write the 'Sector No' register [LBA7:0]
-	ffs_write_byte(0x00);
-
-	ffs_set_address(0x02);					//Write the 'Sector Count' register (no of sectors to be transfered to complete the operation)
-	ffs_write_byte(0x01);
-
-	ffs_set_address(0x07);					//Write the 'Command' register
-	ffs_write_byte(0x20);					//Read sector(s) command
-
-	ffs_set_address(0x00);					//Read the data register
+	//Read sector(s) command
+	CF_COMMAND = 0x20;
 
 	//Read and dump the first 223 words (446 bytes of boot up executable code))
 	for (b_temp = 0; b_temp < 223; b_temp++)
@@ -292,12 +273,15 @@ void ffs_process (void)
 
 	//Check for Partition 1 active (0x00 = inactive, 0x80 = active) [1]
 	//(We allow a value of 0x00 for partition 1 as this partition must be present and on some disks a value of 0x00 has been found)
-	b_temp = ffs_read_byte();
+	// b_temp = ffs_read_byte();
 	//if (b_temp != 0x80)
 	//	goto init_new_ffs_card_fail
 
 	//Get 'Beginning of Partition - Head' [0x000001bf]
-	head = ffs_read_byte();
+	// head = ffs_read_byte();
+	w_temp = ffs_read_word();
+	// TODO: Is this the correct byte? We're expecting 0, not 0x80
+	head = w_temp >> 8;
 
 
 	//Get 'Beginning of Partition - Cylinder + Sector' [0x000001c0]
@@ -330,7 +314,10 @@ void ffs_process (void)
 
 	//Read the 'Type Of Partition' [0x000001c2]
 	//(We accept FAT16 or FAT32)
-	b_temp = ffs_read_byte();
+	w_temp = ffs_read_word();
+	// TODO: Is this the correct byte?
+	b_temp = w_temp >> 8;
+	// b_temp = ffs_read_byte();
 
 	if (b_temp == 0x04)						//FAT16 (smaller than 32MB)
 		disk_is_fat_32 = 0;
@@ -346,7 +333,7 @@ void ffs_process (void)
 		goto init_new_ffs_card_fail;
 
 	//Get end of partition - head [0x000001c3]
-	ffs_read_byte();
+	// ffs_read_byte();
 
 	//Get end of partition - Cylinder & Sector [0x000001c4]
 	ffs_read_word();
@@ -541,7 +528,7 @@ void ffs_process (void)
 	//-----------------------------
 	//----- CARD IS OK TO USE -----
 	//-----------------------------
-	FFS_CE = 1;						//Deselect the card
+	// FFS_CE = 1;						//Deselect the card
 	ffs_card_ok = 1;				//Flag that the card is OK
 
 	//Do CF Driver specific initialisations
@@ -555,7 +542,7 @@ void ffs_process (void)
 //----- CARD IS NOT COMPATIBLE -----
 //----------------------------------
 init_new_ffs_card_fail:
-	FFS_CE = 1;						//Deselect the card
+	// FFS_CE = 1;						//Deselect the card
 	ffs_card_ok = 0;				//Flag that the card is not OK
 	return;
 }
@@ -600,10 +587,11 @@ BYTE ffs_is_card_present (void)
 
 
 	//IF CD pin is low then card is present
-	if (FFS_CD_PIN_REGISTER & FFS_CD_PIN_BIT)
-		return(0);
-	else
-		return(1);
+	// if (FFS_CD_PIN_REGISTER & FFS_CD_PIN_BIT)
+	// 	return(0);
+	// else
+	// Not sure how to check if the card is there with the CF-IDE adapter, so let's just assume.
+	return(1);
 }
 
 
@@ -618,11 +606,11 @@ BYTE ffs_is_card_present (void)
 //***************************************
 void ffs_card_reset_pin (BYTE pin_state)
 {
-
-	if (pin_state)
-		FFS_RESET_PIN_REGISTER  |= FFS_RESET_PIN_BIT;
-	else
-		FFS_RESET_PIN_REGISTER  &= ~FFS_RESET_PIN_BIT;
+	// I don't have a reset pin besides the system reset
+	// if (pin_state)
+	// 	FFS_RESET_PIN_REGISTER  |= FFS_RESET_PIN_BIT;
+	// else
+	// 	FFS_RESET_PIN_REGISTER  &= ~FFS_RESET_PIN_BIT;
 	
 	#ifdef	FFS_RESET_PIN_FUNCTION
 		FFS_RESET_PIN_FUNCTION();
@@ -646,7 +634,8 @@ void ffs_card_reset_pin (BYTE pin_state)
 void ffs_read_sector_to_buffer (DWORD sector_lba)
 {
 	WORD count;
-	BYTE *buffer_pointer;
+	// BYTE *buffer_pointer;
+	WORD *buffer_pointer;
 
 
 	//----- IF LBA MATCHES THE LAST LBA DON'T BOTHER RE-READING AS THE DATA IS STILL IN THE BUFFER -----
@@ -655,7 +644,7 @@ void ffs_read_sector_to_buffer (DWORD sector_lba)
 		return;
 	}
 
-	FFS_CE = 0;										//Select the card
+	// FFS_CE = 0;										//Select the card
 
 
 	//----- IF THE BUFFER CONTAINS DATA THAT IS WAITING TO BE WRITTEN THEN WRITE IT FIRST -----
@@ -664,7 +653,7 @@ void ffs_read_sector_to_buffer (DWORD sector_lba)
 		if (ffs_buffer_contains_lba != 0xffffffff)			//This should not be possible but check is made just in case!
 			ffs_write_sector_from_buffer(ffs_buffer_contains_lba);
 
-		FFS_CE = 0;										//Select the card again
+		// FFS_CE = 0;										//Select the card again
 
 		ffs_buffer_needs_writing_to_card = 0;
 	}
@@ -672,40 +661,31 @@ void ffs_read_sector_to_buffer (DWORD sector_lba)
 
 
 	//----- NEW LBA TO BE LOADED -----
-	ffs_set_address(0x06);							//0x06 - Write the 'Select Card/Head' register [LBA27:24 - bits3:0]
-	ffs_write_byte((BYTE)(0b11100000 | (sector_lba >> 24)));	//(Use Logic Block Addressing - not Cylinder,Head,Sector)
+	CF_LBA3 = (BYTE)(0b11100000 | (sector_lba >> 24));
+	CF_LBA2 = (BYTE)((sector_lba & 0x00ff0000) >> 16);
+	CF_LBA1 = (BYTE)((sector_lba & 0x0000ff00) >> 8);
+	CF_LBA0 = (BYTE)(sector_lba & 0x000000ff);
 
-	ffs_set_address(0x05);							//0x05 - Write the 'Cylinder High' register [LBA23:16]
-	ffs_write_byte((BYTE)((sector_lba & 0x00ff0000) >> 16));
+	//0x02 - Write the 'Sector Count' register (no of sectors to be transfered to complete the operation)
+	CF_COUNT = 1;
 
-	ffs_set_address(0x04);							//0x04 - Write the 'Cylinder Low' register [LBA15:8]
-	ffs_write_byte((BYTE)((sector_lba & 0x0000ff00) >> 8));
-
-	ffs_set_address(0x03);							//0x03 - Write the 'Sector No' register [LBA7:0]
-	ffs_write_byte((BYTE)(sector_lba & 0x000000ff));
-
-	ffs_set_address(0x02);							//0x02 - Write the 'Sector Count' register (no of sectors to be transfered to complete the operation)
-	ffs_write_byte(1);
-
-	ffs_set_address(0x07);							//0x07 - Write the 'Command' register
-	ffs_write_byte(0x20);							//Read sector(s) command
-
-	ffs_set_address(0x00);							//0x00 - Read from the data register
+	//0x07 - Write the 'Command' register
+	CF_COMMAND = 0x20;
 
 	ffs_buffer_contains_lba = 0xffffffff;			//Flag that buffer does not currently contain any lba
 
 
 	//----- READ THE SECTOR INTO THE BUFFER -----
-	buffer_pointer = &FFS_DRIVER_GEN_512_BYTE_BUFFER[0];
+	buffer_pointer = (WORD*) &FFS_DRIVER_GEN_512_BYTE_BUFFER[0];
 
-	for (count = 0; count < ffs_bytes_per_sector; count++)
+	// for (count = 0; count < ffs_bytes_per_sector; count++)
+	for (count = 0; count < ffs_bytes_per_sector; count += 2)
 	{
-		*buffer_pointer++ = ffs_read_byte();
+		// TODO: Is this right? Do I need to do a byte swap?
+		*buffer_pointer++ = CF_DATA;
 	}
 
 	ffs_buffer_contains_lba = sector_lba;				//Flag that the data buffer currently contains data for this LBA (logged to avoid re-loading the buffer again if its not necessary)
-
-	FFS_CE = 1;											//De-select the card
 
 }
 
@@ -723,133 +703,37 @@ void ffs_read_sector_to_buffer (DWORD sector_lba)
 void ffs_write_sector_from_buffer (DWORD sector_lba)
 {
 	WORD count;
-	BYTE *buffer_pointer;
+	WORD *buffer_pointer;
 	
-	buffer_pointer = &FFS_DRIVER_GEN_512_BYTE_BUFFER[0];
+	buffer_pointer = (WORD*) &FFS_DRIVER_GEN_512_BYTE_BUFFER[0];
 
 	ffs_buffer_needs_writing_to_card = 0;			//Flag that buffer is no longer waiting to write to card (must be at top as this function
 													//calls other functions that check this flag and would call the function back)
 
 	
 	//----- SETUP TO WRITE THE SECTOR -----
-	FFS_CE = 0;										//Select the card
 
-	ffs_set_address(0x06);							//0x06 - Write the 'Select Card/Head' register [LBA27:24 - bits3:0]
-	ffs_write_byte((BYTE)(0b11100000 | (sector_lba >> 24)));	//(Use Logic Block Addressing - not Cylinder,Head,Sector)
+	CF_LBA3 = (BYTE)(0b11100000 | (sector_lba >> 24));
+	CF_LBA2 = (BYTE)((sector_lba & 0x00ff0000) >> 16);
+	CF_LBA1 = (BYTE)((sector_lba & 0x0000ff00) >> 8);
+	CF_LBA0 = (BYTE)(sector_lba & 0x000000ff);
 
-	ffs_set_address(0x05);							//0x05 - Write the 'Cylinder High' register [LBA23:16]
-	ffs_write_byte((BYTE)((sector_lba & 0x00ff0000) >> 16));
+	//0x02 - Write the 'Sector Count' register (no of sectors to be transfered to complete the operation)
+	CF_COUNT = 1;
 
-	ffs_set_address(0x04);							//0x04 - Write the 'Cylinder Low' register [LBA15:8]
-	ffs_write_byte((BYTE)((sector_lba & 0x0000ff00) >> 8));
-
-	ffs_set_address(0x03);							//0x03 - Write the 'Sector No' register [LBA7:0]
-	ffs_write_byte((BYTE)(sector_lba & 0x000000ff));
-
-	ffs_set_address(0x02);							//0x02 - Write the 'Sector Count' register (no of sectors to be transfered to complete the operation)
-	ffs_write_byte(1);
-
-	ffs_set_address(0x07);							//0x07 - Write the 'Command' register
-	ffs_write_byte(0x30);							//Write sector(s) command
-
-	ffs_set_address(0x00);							//0x00 - Write to the data register
-
+	//0x07 - Write the 'Command' register
+	CF_COMMAND = 0x30;
 
 	//----- WRITE THE BUFFER TO THE CARD SECTOR -----
-	for (count = 0; count < ffs_bytes_per_sector; count++)
+	// for (count = 0; count < ffs_bytes_per_sector; count++)
+	for (count = 0; count < ffs_bytes_per_sector; count += 2)
 	{
-		ffs_write_byte(*buffer_pointer++);
+		// ffs_write_byte(*buffer_pointer++);
+		CF_DATA = *buffer_pointer++;
 	}
 	
 
-	FFS_CE = 1;						//Deselect the card
 }
-
-
-
-
-//*********************************
-//*********************************
-//********** SET ADDRESS **********
-//*********************************
-//*********************************
-void ffs_set_address (BYTE address)
-{
-	//----- IF THE BUFFER CONTAINS DATA THAT IS WAITING TO BE WRITTEN THEN WRITE IT FIRST -----
-	//(As we are now doing some other operation)
-	if (ffs_buffer_needs_writing_to_card)
-	{
-		if (ffs_buffer_contains_lba != 0xffffffff)			//This should not be possible but check is made just in case!
-			ffs_write_sector_from_buffer(ffs_buffer_contains_lba);
-
-		FFS_CE = 0;										//Select the card again
-
-		ffs_buffer_needs_writing_to_card = 0;
-	}
-
-	ffs_buffer_contains_lba = 0xffffffff;			//Flag that buffer does not currently contain any lba (done here as something new is happening with the card so don't rely on the data buffer having the same data in it after whatever is happening)
-
-	//----- SET THE ADDRESS -----
-	if (address & 0x01)
-		FFS_ADDRESS_REGISTER |= FFS_ADDRESS_BIT_0;
-	else
-		FFS_ADDRESS_REGISTER &= ~FFS_ADDRESS_BIT_0;
-
-	if (address & 0x02)
-		FFS_ADDRESS_REGISTER |= FFS_ADDRESS_BIT_1;
-	else
-		FFS_ADDRESS_REGISTER &= ~FFS_ADDRESS_BIT_1;
-
-	if (address & 0x04)
-		FFS_ADDRESS_REGISTER |= FFS_ADDRESS_BIT_2;
-	else
-		FFS_ADDRESS_REGISTER &= ~FFS_ADDRESS_BIT_2;
-
-	#ifdef FFS_ADDRESS_FUNCTION
-		FFS_ADDRESS_FUNCTION();
-	#endif
-}
-
-
-
-
-
-
-//****************************************
-//****************************************
-//********** WRITE BYTE TO CARD **********
-//****************************************
-//****************************************
-BYTE ffs_write_byte (BYTE data)
-{
-	//Bus to outputs
-	FFS_DATA_BUS_TO_OUTPUTS;
-
-	//Load the data to latch
-	FFS_DATA_BUS_OP = data;
-
-	//Set timeout to 100mS (added timeout to stop crash sometimes when card is inserted)
-	ffs_10ms_timer = 10;
-
-	while (ffs_10ms_timer)
-	{
-		if(FFS_RDY)				//Ensure card is ready
-			goto ffs_write_byte_1;
-	}
-	return (0);					//Error
-
-ffs_write_byte_1:
-	FFS_WE = 0;
-
-	FFS_DELAY_FOR_WAIT_SIGNAL();
-	while(FFS_WAIT == 0);		//Check to see if card is inserting a wait state
-
-	FFS_WE = 1;
-	
-	return (1);
-}
-
-
 
 
 
@@ -862,77 +746,6 @@ ffs_write_byte_1:
 WORD ffs_read_word (void)
 {
 	WORD data;
-
-	while(FFS_RDY == 0);				//Ensure card is ready
-
-	//Bus to inputs
-	FFS_DATA_BUS_TO_INPUTS;
-
-	FFS_OE = 0;
-
-	FFS_DELAY_FOR_WAIT_SIGNAL();
-	while(FFS_WAIT == 0);		//Check to see if card is inserting a wait state
-
-	data = (WORD)FFS_DATA_BUS_IP;
-
-	FFS_OE = 1;
-
-	FFS_DELAY_FOR_RDY_SIGNAL();
-	while(FFS_RDY == 0);				//Ensure card is ready
-
-	FFS_OE = 0;
-
-	FFS_DELAY_FOR_WAIT_SIGNAL();
-	while(FFS_WAIT == 0);		//Check to see if card is inserting a wait state
-
-	data += ((WORD)FFS_DATA_BUS_IP << 8);
-
-	FFS_OE = 1;
-
-	//Bus to outputs
-	FFS_DATA_BUS_TO_OUTPUTS;
-
+	data = CF_DATA;
 	return (data);
 }
-
-
-
-
-
-
-//*****************************************
-//*****************************************
-//********** READ BYTE FROM CARD **********
-//*****************************************
-//*****************************************
-BYTE ffs_read_byte (void)
-{
-	BYTE data;
-
-	while(FFS_RDY == 0);				//Ensure card is ready
-
-	//Bus to inputs
-	FFS_DATA_BUS_TO_INPUTS;
-
-	FFS_OE = 0;
-
-	FFS_DELAY_FOR_WAIT_SIGNAL();
-	while(FFS_WAIT == 0);		//Check to see if card is inserting a wait state
-
-	data = FFS_DATA_BUS_IP;
-
-	FFS_OE = 1;
-
-	//Bus to outputs
-	FFS_DATA_BUS_TO_OUTPUTS;
-
-	return (data);
-}
-
-
-
-
-
-
-
-

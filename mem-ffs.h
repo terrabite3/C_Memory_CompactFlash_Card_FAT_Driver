@@ -61,6 +61,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 
+#include "mem-types.h"
 
 
 
@@ -80,7 +81,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //----- DEFINE TARGET COMPILER & PROCESSOR -----
 //----------------------------------------------
 //(ONLY 1 SHOULD BE INCLUDED, COMMENT OUT OTHERS - ALSO SET IN THE OTHER DRIVER .h FILE)
-#define	FFS_USING_MICROCHIP_C18_COMPILER
+// #define	FFS_USING_MICROCHIP_C18_COMPILER
 //<< add other compiler types here
 
 
@@ -325,6 +326,7 @@ BYTE ffs_general_buffer[512];								//<<<<< CHECK FOR A NEW APPLICATION <<<<<
 
 #endif			//#ifdef FFS_USING_MICROCHIP_C18_COMPILER
 
+BYTE ffs_general_buffer[512];								//<<<<< CHECK FOR A NEW APPLICATION <<<<<
 
 #else	//FFS_C
 //---------------------------------------
@@ -352,6 +354,7 @@ extern BYTE ffs_general_buffer[512];								//<<<<< CHECK FOR A NEW APPLICATION 
 
 #endif			//#ifdef FFS_USING_MICROCHIP_C18_COMPILER
 
+extern BYTE ffs_general_buffer[512];								//<<<<< CHECK FOR A NEW APPLICATION <<<<<
 
 #endif	//FFS_C
 

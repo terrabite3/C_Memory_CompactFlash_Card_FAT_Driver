@@ -30,7 +30,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 
-#include "main.h"					//Global data type definitions (see https://github.com/ibexuk/C_Generic_Header_File )
+// #include "main.h"					//Global data type definitions (see https://github.com/ibexuk/C_Generic_Header_File )
 #define FFS_C
 #include "mem-ffs.h"
 #include "mem-cf.h"
@@ -712,7 +712,6 @@ int ffs_fputc (int data, FFS_FILE *file_pointer)
 				if (dw_temp == 0xffffffff)			//0xffffffff = no empty cluster found
 				{
 					//NOT ENOUGH SPACE FOR ANY MORE OF FILE
-					FFS_CE = 1;
 					file_pointer->flags.bits.end_of_file = 1;
 					return(FFS_EOF);
 				}
@@ -861,7 +860,6 @@ int ffs_fgetc (FFS_FILE *file_pointer)
 					if (dw_temp >= 0x0ffffff8)
 					{
 						//There is no next cluster - all of file has been read
-						FFS_CE = 1;
 						file_pointer->flags.bits.end_of_file = 1;
 						return(FFS_EOF);
 					}
@@ -872,7 +870,6 @@ int ffs_fgetc (FFS_FILE *file_pointer)
 					if (dw_temp >= 0xfff8)
 					{
 						//There is no next cluster - all of file has been read
-						FFS_CE = 1;
 						file_pointer->flags.bits.end_of_file = 1;
 						return(FFS_EOF);
 					}
@@ -1168,7 +1165,6 @@ int ffs_fflush (FFS_FILE *file_pointer)
 	}
 
 
-	FFS_CE = 1;										//De-select the card
 
 	return(0);
 }
@@ -1237,7 +1233,6 @@ int ffs_remove (const char *filename)
 	if (read_cluster_number == 0xffffffff)		//0xffffffff = file not found
 	{
 		//FILE DOES NOT EXIST
-		FFS_CE = 1;
 		return(1);
 	}
 
@@ -1361,8 +1356,6 @@ int ffs_remove (const char *filename)
 			lowest_cluster_number_released = read_cluster_number;
 	}
 
-	FFS_CE = 1;
-
 	//If we have free'd up some lower clusters than the current cluster to start looking in when writing new clusters then change the value
 	if (last_found_free_cluster > lowest_cluster_number_released)
 		last_found_free_cluster = lowest_cluster_number_released;
@@ -1405,7 +1398,6 @@ int ffs_rename (const char *old_filename, const char *new_filename)
 	if (read_cluster_number == 0xffffffff)		//0xffffffff = file not found
 	{
 		//FILE DOES NOT EXIST
-		FFS_CE = 1;
 		return(1);
 	}
 
@@ -1596,7 +1588,6 @@ DWORD ffs_find_file (const char *filename, DWORD *file_size, BYTE *attribute_byt
 											&read_cluster_number, this_is_first_read, directory_entry_sector,
 											directory_entry_within_sector) == 0)
 		{
-			FFS_CE = 1;								//Deselect the card
 			return((DWORD)0xffffffff);				//Reached end of directory
 		}
 		this_is_first_read = 0;
@@ -1606,7 +1597,6 @@ DWORD ffs_find_file (const char *filename, DWORD *file_size, BYTE *attribute_byt
 		//If 1st value is 0x00 then entry has never been used (erased entries are 0xe5) so 0x00 is the end of used directory marker)
 		if (*(read_file_name + 0) == 0x00)
 		{
-			FFS_CE = 1;						//Deselect the card
 			return((DWORD)0xffffffff);
 		}
 
@@ -1645,7 +1635,6 @@ DWORD ffs_find_file (const char *filename, DWORD *file_size, BYTE *attribute_byt
 		if (this_is_the_file)
 		{
 			//THIS IS THE FILE
-			FFS_CE = 1;						//Deselect the card
 			return(read_cluster_number);
 		}
 	}
@@ -1850,7 +1839,6 @@ BYTE ffs_read_next_directory_entry (BYTE *file_name, BYTE *file_extension, BYTE 
 					if (dw_temp == 0x0fffffff)
 					{
 						//No more space to extend the directory
-						FFS_CE = 1;						//Deselect the card
 						return (0);
 					}
 					ffs_modify_cluster_entry_in_fat(current_cluster, dw_temp);
@@ -1881,7 +1869,6 @@ BYTE ffs_read_next_directory_entry (BYTE *file_name, BYTE *file_extension, BYTE 
 			{
 				//----- FAT16 -----
 				//We've reached the end of the root directory
-				FFS_CE = 1;						//Deselect the card
 				return (0);
 			}
 		}
@@ -1999,7 +1986,6 @@ BYTE ffs_read_next_directory_entry (BYTE *file_name, BYTE *file_extension, BYTE 
 	*directory_entry_sector = read_write_directory_last_lba;
 	*directory_entry_within_sector = read_write_directory_last_entry;
 
-	FFS_CE = 1;						//Deselect the card
 	return(1);
 }
 
@@ -2093,7 +2079,6 @@ void ffs_overwrite_last_directory_entry (BYTE *file_name, BYTE *file_extension, 
 
 	//WRITE THE BUFFER BACK TO THE DISK SECTOR
 	ffs_write_sector_from_buffer(read_write_directory_last_lba);
-	FFS_CE = 1;						//Deselect the card
 }
 
 
@@ -2199,7 +2184,6 @@ BYTE ffs_create_new_file (const char *file_name, DWORD *write_file_start_cluster
 	if (*write_file_start_cluster == 0xffffffff)			//0xffffffff = no empty cluster found
 	{
 		//No cluster available - disk is full
-		FFS_CE = 1;						//Deselect the card
 		return(0);
 	}
 
@@ -2209,7 +2193,6 @@ BYTE ffs_create_new_file (const char *file_name, DWORD *write_file_start_cluster
 										&read_cluster_number, 1, directory_entry_sector, directory_entry_within_sector) == 0)			//1 = start from beginning of directory
 	{
 		//Error - should not be able to happen
-		FFS_CE = 1;						//Deselect the card
 		return(0);						//Reached end of directory
 	}
 
@@ -2222,7 +2205,6 @@ BYTE ffs_create_new_file (const char *file_name, DWORD *write_file_start_cluster
 											&read_cluster_number, 0, directory_entry_sector, directory_entry_within_sector) == 0)
 		{
 			//Directory is full - no space for another entry
-			FFS_CE = 1;						//Deselect the card
 			return(0);						//Reached end of directory
 		}
 	}
@@ -2237,7 +2219,6 @@ BYTE ffs_create_new_file (const char *file_name, DWORD *write_file_start_cluster
 
 
 
-	FFS_CE = 1;						//Deselect the card
 	return(1);
 }
 

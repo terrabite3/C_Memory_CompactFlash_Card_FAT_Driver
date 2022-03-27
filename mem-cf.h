@@ -29,7 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 
-
+#include "mem-types.h"
 
 
 //*****************************
@@ -46,7 +46,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //----- DEFINE TARGET COMPILER & PROCESSOR -----
 //----------------------------------------------
 //(ONLY 1 SHOULD BE INCLUDED, COMMENT OUT OTHERS - ALSO SET IN THE OTHER DRIVER .h FILE)
-#define	FFS_USING_MICROCHIP_C18_COMPILER
+// #define	FFS_USING_MICROCHIP_C18_COMPILER
 //<< add other compiler types here
 
 
@@ -95,8 +95,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #endif		//#ifdef FFS_USING_MICROCHIP_C18_COMPILER
 
 
+// TODO: move to .c file?
+#define CF_DATA     (*((volatile WORD*) 0x900000))
+#define CF_ERROR    (*((volatile BYTE*) 0x900003))
+#define CF_FEATURE  (*((volatile BYTE*) 0x900003))
+#define CF_COUNT    (*((volatile BYTE*) 0x900005))
+#define CF_LBA0     (*((volatile BYTE*) 0x900007))
+#define CF_LBA1     (*((volatile BYTE*) 0x900009))
+#define CF_LBA2     (*((volatile BYTE*) 0x90000B))
+#define CF_LBA3     (*((volatile BYTE*) 0x90000D))
+#define CF_STATUS   (*((volatile BYTE*) 0x90000F))
+#define CF_COMMAND  (*((volatile BYTE*) 0x90000F))
 
-
+#define	FFS_DRIVER_GEN_512_BYTE_BUFFER	ffs_general_buffer		//This general buffer is used by routines and may be the same as the buffer that
 
 
 //----------------------------------------
@@ -152,12 +163,7 @@ BYTE ffs_is_card_present (void);
 void ffs_card_reset_pin (BYTE pin_state);
 void ffs_read_sector_to_buffer (DWORD sector_lba);
 void ffs_write_sector_from_buffer (DWORD sector_lba);
-void ffs_set_address (BYTE address);
-BYTE ffs_write_byte (BYTE data);
 WORD ffs_read_word (void);
-BYTE ffs_read_byte (void);
-
-
 
 
 #else
@@ -169,12 +175,7 @@ extern BYTE ffs_is_card_present (void);
 extern void ffs_card_reset_pin (BYTE pin_state);
 extern void ffs_read_sector_to_buffer (DWORD sector_lba);
 extern void ffs_write_sector_from_buffer (DWORD sector_lba);
-extern void ffs_set_address (BYTE address);
-extern BYTE ffs_write_byte (BYTE data);
 extern WORD ffs_read_word (void);
-extern BYTE ffs_read_byte (void);
-
-
 
 #endif
 
